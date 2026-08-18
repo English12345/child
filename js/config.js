@@ -29,5 +29,5 @@ const AKUN_VALID = {
 // FAIL-OPEN (login tetap diizinkan tanpa cek device) supaya
 // pembeli sah tidak ikut terkunci gara-gara masalah pihak ketiga.
 const DEVICE_LOCK = {
-  npointUrl: "https://api.npoint.io/GANTI_DENGAN_ID_BIN_KAMU"
+  npointUrl: "https://api.npoint.io/4006c7c62ae528034dab"
 };
