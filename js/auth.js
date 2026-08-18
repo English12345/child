@@ -1,20 +1,42 @@
 const form = document.getElementById('loginForm');
 const errorMsg = document.getElementById('errorMsg');
 
-form.addEventListener('submit', (e) => {
+const submitBtn = form.querySelector('button[type="submit"]');
+
+form.addEventListener('submit', async (e) => {
   e.preventDefault();
   errorMsg.classList.remove('show');
 
   const username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value;
 
-  if (username === AKUN_VALID.username && password === AKUN_VALID.password) {
-    // Simpan status login di perangkat ini supaya tidak perlu login ulang tiap buka aplikasi.
-    localStorage.setItem('sudahLogin', 'ya');
-    localStorage.setItem('namaPengguna', username);
-    window.location.href = 'dashboard.html';
-  } else {
+  if (username !== AKUN_VALID.username || password !== AKUN_VALID.password) {
     errorMsg.textContent = 'Username atau password salah.';
     errorMsg.classList.add('show');
+    return;
   }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.dataset.originalText = submitBtn.textContent;
+    submitBtn.textContent = 'Memeriksa perangkat...';
+  }
+
+  const hasilCek = await cekDanKunciDevice();
+
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = submitBtn.dataset.originalText || 'Masuk';
+  }
+
+  if (!hasilCek.ok) {
+    errorMsg.textContent = 'Akun ini sedang aktif di perangkat lain. Hubungi penjual untuk reset akses.';
+    errorMsg.classList.add('show');
+    return;
+  }
+
+  // Simpan status login di perangkat ini supaya tidak perlu login ulang tiap buka aplikasi.
+  localStorage.setItem('sudahLogin', 'ya');
+  localStorage.setItem('namaPengguna', username);
+  window.location.href = 'dashboard.html';
 });
