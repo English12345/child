@@ -10,7 +10,11 @@ form.addEventListener('submit', async (e) => {
   const username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value;
 
-  if (username !== AKUN_VALID.username || password !== AKUN_VALID.password) {
+  const akunCocok = AKUN_VALID.find(
+    (a) => a.username === username && a.password === password
+  );
+
+  if (!akunCocok) {
     errorMsg.textContent = 'Username atau password salah.';
     errorMsg.classList.add('show');
     return;
@@ -22,7 +26,7 @@ form.addEventListener('submit', async (e) => {
     submitBtn.textContent = 'Memeriksa perangkat...';
   }
 
-  const hasilCek = await cekDanKunciDevice();
+  const hasilCek = await cekDanKunciDevice(username);
 
   if (submitBtn) {
     submitBtn.disabled = false;
