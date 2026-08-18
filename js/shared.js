@@ -88,6 +88,21 @@ async function cekDanKunciDevice() {
         })
       });
       if (!resDaftar.ok) throw new Error('Gagal mendaftarkan device');
+
+      // npoint.io tidak punya "tulis hanya kalau masih kosong" (atomic
+      // compare-and-swap), jadi ada celah kecil: device lain bisa saja
+      // ikut mendaftar di waktu hampir bersamaan dan menimpa data kita
+      // SETELAH kita baca "kosong" tapi SEBELUM POST kita tersimpan.
+      // Baca ulang untuk mempersempit celah itu (bukan menghilangkan
+      // total — itu butuh backend dengan transaksi, di luar npoint.io).
+      const resVerifikasi = await fetchDenganTimeout(DEVICE_LOCK.npointUrl);
+      if (resVerifikasi.ok) {
+        const dataVerifikasi = await resVerifikasi.json();
+        if (dataVerifikasi.deviceId && dataVerifikasi.deviceId !== deviceIdSaya) {
+          return { ok: false, alasan: 'device-lain' };
+        }
+      }
+
       simpanCacheDeviceCheck(DEVICE_CHECK_CACHE_JAM);
       return { ok: true };
     }
