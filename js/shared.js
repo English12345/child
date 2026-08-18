@@ -17,12 +17,14 @@ const DEVICE_CHECK_CACHE_JAM = 24;
 
 // Kalau npoint.io gagal/lambat dihubungi, jangan coba lagi di setiap
 // percobaan login selama jam ini — supaya saat npoint.io down, pembeli
-// asli tidak ikut kena lemot berulang-ulang.
-const DEVICE_CHECK_GAGAL_CACHE_JAM = 1;
+// asli tidak ikut kena lemot berulang-ulang. Dibuat pendek supaya kalau
+// npoint.io cuma bermasalah sesaat, device-lock kembali ketat secepatnya.
+const DEVICE_CHECK_GAGAL_CACHE_JAM = 0.25; // 15 menit
 
-// Batas maksimal menunggu respons npoint.io sebelum dianggap gagal
-// dan fail-open (login tetap diizinkan).
-const DEVICE_CHECK_TIMEOUT_MS = 2500;
+// Batas maksimal menunggu SATU percobaan ke npoint.io sebelum dianggap
+// gagal. Dinaikkan sedikit supaya npoint yang cuma lambat (bukan down)
+// masih sempat dijawab dan device-lock tetap berfungsi.
+const DEVICE_CHECK_TIMEOUT_MS = 4000;
 
 function simpanCacheDeviceCheck(username, jam) {
   const kadaluarsa = Date.now() + jam * 60 * 60 * 1000;
@@ -42,6 +44,24 @@ async function fetchDenganTimeout(url, opsi = {}, timeoutMs = DEVICE_CHECK_TIMEO
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Coba hubungi npoint.io sampai 2 kali sebelum benar-benar dianggap gagal.
+// Ini menutup celah "gangguan sesaat" (satu request kebetulan lambat/gagal)
+// supaya tidak langsung jatuh ke fail-open padahal npoint.io sebenarnya baik-baik saja.
+async function fetchDenganRetry(url, opsi = {}, percobaan = 2) {
+  let errorTerakhir;
+  for (let i = 0; i < percobaan; i++) {
+    try {
+      return await fetchDenganTimeout(url, opsi);
+    } catch (err) {
+      errorTerakhir = err;
+      if (i < percobaan - 1) {
+        await new Promise((r) => setTimeout(r, 400));
+      }
+    }
+  }
+  throw errorTerakhir;
 }
 
 // Ambil deviceId yang tersimpan di browser ini, atau buat baru kalau belum ada.
@@ -78,7 +98,7 @@ async function cekDanKunciDevice(username) {
   }
 
   try {
-    const resBaca = await fetchDenganTimeout(DEVICE_LOCK.npointUrl);
+    const resBaca = await fetchDenganRetry(DEVICE_LOCK.npointUrl);
     if (!resBaca.ok) throw new Error('Gagal membaca status device');
     const data = await resBaca.json();
     const entriUser = data[username];
@@ -94,7 +114,7 @@ async function cekDanKunciDevice(username) {
         }
       };
 
-      const resDaftar = await fetchDenganTimeout(DEVICE_LOCK.npointUrl, {
+      const resDaftar = await fetchDenganRetry(DEVICE_LOCK.npointUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataBaru)
@@ -108,7 +128,7 @@ async function cekDanKunciDevice(username) {
       // sebagian tertimpa. Baca ulang untuk mempersempit celah itu
       // (bukan menghilangkan total — itu butuh backend dengan transaksi,
       // di luar npoint.io).
-      const resVerifikasi = await fetchDenganTimeout(DEVICE_LOCK.npointUrl);
+      const resVerifikasi = await fetchDenganRetry(DEVICE_LOCK.npointUrl);
       if (resVerifikasi.ok) {
         const dataVerifikasi = await resVerifikasi.json();
         const entriVerifikasi = dataVerifikasi[username];
