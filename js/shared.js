@@ -24,13 +24,13 @@ const DEVICE_CHECK_GAGAL_CACHE_JAM = 1;
 // dan fail-open (login tetap diizinkan).
 const DEVICE_CHECK_TIMEOUT_MS = 2500;
 
-function simpanCacheDeviceCheck(jam) {
+function simpanCacheDeviceCheck(username, jam) {
   const kadaluarsa = Date.now() + jam * 60 * 60 * 1000;
-  localStorage.setItem('deviceCheckKadaluarsa', String(kadaluarsa));
+  localStorage.setItem('deviceCheckKadaluarsa_' + username, String(kadaluarsa));
 }
 
-function cacheDeviceCheckMasihBerlaku() {
-  const kadaluarsa = Number(localStorage.getItem('deviceCheckKadaluarsa') || 0);
+function cacheDeviceCheckMasihBerlaku(username) {
+  const kadaluarsa = Number(localStorage.getItem('deviceCheckKadaluarsa_' + username) || 0);
   return Date.now() < kadaluarsa;
 }
 
@@ -57,19 +57,23 @@ function ambilAtauBuatDeviceId() {
   return id;
 }
 
-// Cek ke npoint.io apakah akun ini sudah "dikunci" ke device lain.
-// - Kalau device ini sudah lolos cek dan cache belum kadaluarsa -> langsung
-//   izinkan, TANPA menghubungi npoint.io sama sekali (instan, tidak lemot).
-// - Kalau belum ada device terdaftar -> daftarkan device ini, izinkan masuk.
-// - Kalau device terdaftar sama dengan device ini -> izinkan masuk.
-// - Kalau device terdaftar beda -> tolak.
+// Cek ke npoint.io apakah AKUN INI (bukan device secara umum) sudah
+// "dikunci" ke device lain. Bin npoint.io menyimpan satu objek berisi
+// data device per-username, contoh:
+// { "belajar": { "deviceId": "dev-xxx" }, "belajar2": { "deviceId": null } }
+//
+// - Kalau device ini sudah lolos cek untuk username ini dan cache belum
+//   kadaluarsa -> langsung izinkan, TANPA menghubungi npoint.io.
+// - Kalau username ini belum punya device terdaftar -> daftarkan device
+//   ini untuk username ini, izinkan masuk.
+// - Kalau device terdaftar untuk username ini sama dengan device ini -> izinkan.
+// - Kalau device terdaftar untuk username ini beda -> tolak.
 // - Kalau npoint.io tidak terjangkau/lambat (>2.5 detik) -> fail-open
-//   (izinkan masuk) dan cache hasil itu 1 jam supaya login berikutnya
-//   selama npoint.io masih bermasalah tidak ikut menunggu lagi.
-async function cekDanKunciDevice() {
+//   (izinkan masuk) dan cache hasil itu 1 jam.
+async function cekDanKunciDevice(username) {
   const deviceIdSaya = ambilAtauBuatDeviceId();
 
-  if (cacheDeviceCheckMasihBerlaku()) {
+  if (cacheDeviceCheckMasihBerlaku(username)) {
     return { ok: true, alasan: 'cache' };
   }
 
@@ -77,45 +81,55 @@ async function cekDanKunciDevice() {
     const resBaca = await fetchDenganTimeout(DEVICE_LOCK.npointUrl);
     if (!resBaca.ok) throw new Error('Gagal membaca status device');
     const data = await resBaca.json();
+    const entriUser = data[username];
 
-    if (!data.deviceId) {
+    if (!entriUser || !entriUser.deviceId) {
+      // Gabungkan (bukan timpa total) supaya username lain di objek yang
+      // sama tidak ikut terhapus saat kita POST ulang seluruh isi bin.
+      const dataBaru = {
+        ...data,
+        [username]: {
+          deviceId: deviceIdSaya,
+          terdaftarPada: new Date().toISOString()
+        }
+      };
+
       const resDaftar = await fetchDenganTimeout(DEVICE_LOCK.npointUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deviceId: deviceIdSaya,
-          terdaftarPada: new Date().toISOString()
-        })
+        body: JSON.stringify(dataBaru)
       });
       if (!resDaftar.ok) throw new Error('Gagal mendaftarkan device');
 
       // npoint.io tidak punya "tulis hanya kalau masih kosong" (atomic
-      // compare-and-swap), jadi ada celah kecil: device lain bisa saja
-      // ikut mendaftar di waktu hampir bersamaan dan menimpa data kita
-      // SETELAH kita baca "kosong" tapi SEBELUM POST kita tersimpan.
-      // Baca ulang untuk mempersempit celah itu (bukan menghilangkan
-      // total — itu butuh backend dengan transaksi, di luar npoint.io).
+      // compare-and-swap) DAN kita menimpa seluruh isi bin setiap POST,
+      // jadi ada celah kecil: device lain (untuk username sama ATAU
+      // username lain) bisa saja menulis di waktu hampir bersamaan dan
+      // sebagian tertimpa. Baca ulang untuk mempersempit celah itu
+      // (bukan menghilangkan total — itu butuh backend dengan transaksi,
+      // di luar npoint.io).
       const resVerifikasi = await fetchDenganTimeout(DEVICE_LOCK.npointUrl);
       if (resVerifikasi.ok) {
         const dataVerifikasi = await resVerifikasi.json();
-        if (dataVerifikasi.deviceId && dataVerifikasi.deviceId !== deviceIdSaya) {
+        const entriVerifikasi = dataVerifikasi[username];
+        if (entriVerifikasi && entriVerifikasi.deviceId && entriVerifikasi.deviceId !== deviceIdSaya) {
           return { ok: false, alasan: 'device-lain' };
         }
       }
 
-      simpanCacheDeviceCheck(DEVICE_CHECK_CACHE_JAM);
+      simpanCacheDeviceCheck(username, DEVICE_CHECK_CACHE_JAM);
       return { ok: true };
     }
 
-    if (data.deviceId === deviceIdSaya) {
-      simpanCacheDeviceCheck(DEVICE_CHECK_CACHE_JAM);
+    if (entriUser.deviceId === deviceIdSaya) {
+      simpanCacheDeviceCheck(username, DEVICE_CHECK_CACHE_JAM);
       return { ok: true };
     }
 
     return { ok: false, alasan: 'device-lain' };
   } catch (err) {
     console.error('Cek device-lock gagal/timeout, fail-open:', err);
-    simpanCacheDeviceCheck(DEVICE_CHECK_GAGAL_CACHE_JAM);
+    simpanCacheDeviceCheck(username, DEVICE_CHECK_GAGAL_CACHE_JAM);
     return { ok: true, alasan: 'server-tidak-terjangkau' };
   }
 }
