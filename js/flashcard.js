@@ -19,20 +19,10 @@
   const speakBtn = document.getElementById('speakBtn');
   const prevBtn = document.getElementById('prevBtn');
   const nextBtn = document.getElementById('nextBtn');
-  const shuffleBtn = document.getElementById('shuffleBtn');
   const quizLink = document.getElementById('quizLink');
 
   let kataList = [];
   let index = 0;
-
-  function acakArray(arr) {
-    const salinan = [...arr];
-    for (let i = salinan.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [salinan[i], salinan[j]] = [salinan[j], salinan[i]];
-    }
-    return salinan;
-  }
 
   function tampilkanKartu() {
     const item = kataList[index];
@@ -67,6 +57,7 @@
   }
 
   flipCard.addEventListener('click', () => {
+    if (typeof bunyiKlik === 'function') bunyiKlik();
     flipCard.classList.toggle('flipped');
     // Setiap kartu dibalik ke sisi Bahasa Inggris, langsung ucapkan katanya.
     if (flipCard.classList.contains('flipped')) {
@@ -76,20 +67,17 @@
 
   speakBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (typeof bunyiKlik === 'function') bunyiKlik();
     ucapkanKata(kataList[index].en);
   });
 
   prevBtn.addEventListener('click', () => {
+    if (typeof bunyiKlik === 'function') bunyiKlik();
     if (index > 0) { index--; tampilkanKartu(); }
   });
 
   nextBtn.addEventListener('click', () => {
+    if (typeof bunyiKlik === 'function') bunyiKlik();
     if (index < kataList.length - 1) { index++; tampilkanKartu(); }
-  });
-
-  shuffleBtn.addEventListener('click', () => {
-    kataList = acakArray(kataList);
-    index = 0;
-    tampilkanKartu();
   });
 })();
