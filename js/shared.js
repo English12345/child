@@ -11,6 +11,100 @@ function pastikanLogin() {
   return { nama: localStorage.getItem('namaPengguna') };
 }
 
+// Berapa lama hasil cek device dianggap masih berlaku, supaya device yang
+// sudah terdaftar TIDAK perlu menghubungi npoint.io di setiap login.
+const DEVICE_CHECK_CACHE_JAM = 24;
+
+// Kalau npoint.io gagal/lambat dihubungi, jangan coba lagi di setiap
+// percobaan login selama jam ini — supaya saat npoint.io down, pembeli
+// asli tidak ikut kena lemot berulang-ulang.
+const DEVICE_CHECK_GAGAL_CACHE_JAM = 1;
+
+// Batas maksimal menunggu respons npoint.io sebelum dianggap gagal
+// dan fail-open (login tetap diizinkan).
+const DEVICE_CHECK_TIMEOUT_MS = 2500;
+
+function simpanCacheDeviceCheck(jam) {
+  const kadaluarsa = Date.now() + jam * 60 * 60 * 1000;
+  localStorage.setItem('deviceCheckKadaluarsa', String(kadaluarsa));
+}
+
+function cacheDeviceCheckMasihBerlaku() {
+  const kadaluarsa = Number(localStorage.getItem('deviceCheckKadaluarsa') || 0);
+  return Date.now() < kadaluarsa;
+}
+
+async function fetchDenganTimeout(url, opsi = {}, timeoutMs = DEVICE_CHECK_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...opsi, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Ambil deviceId yang tersimpan di browser ini, atau buat baru kalau belum ada.
+// Ini BUKAN fingerprint hardware — cuma ID acak yang disimpan di localStorage,
+// jadi kalau localStorage di-clear atau ganti browser, device ini akan
+// dianggap "device baru" oleh sistem.
+function ambilAtauBuatDeviceId() {
+  let id = localStorage.getItem('deviceId');
+  if (!id) {
+    id = 'dev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem('deviceId', id);
+  }
+  return id;
+}
+
+// Cek ke npoint.io apakah akun ini sudah "dikunci" ke device lain.
+// - Kalau device ini sudah lolos cek dan cache belum kadaluarsa -> langsung
+//   izinkan, TANPA menghubungi npoint.io sama sekali (instan, tidak lemot).
+// - Kalau belum ada device terdaftar -> daftarkan device ini, izinkan masuk.
+// - Kalau device terdaftar sama dengan device ini -> izinkan masuk.
+// - Kalau device terdaftar beda -> tolak.
+// - Kalau npoint.io tidak terjangkau/lambat (>2.5 detik) -> fail-open
+//   (izinkan masuk) dan cache hasil itu 1 jam supaya login berikutnya
+//   selama npoint.io masih bermasalah tidak ikut menunggu lagi.
+async function cekDanKunciDevice() {
+  const deviceIdSaya = ambilAtauBuatDeviceId();
+
+  if (cacheDeviceCheckMasihBerlaku()) {
+    return { ok: true, alasan: 'cache' };
+  }
+
+  try {
+    const resBaca = await fetchDenganTimeout(DEVICE_LOCK.npointUrl);
+    if (!resBaca.ok) throw new Error('Gagal membaca status device');
+    const data = await resBaca.json();
+
+    if (!data.deviceId) {
+      const resDaftar = await fetchDenganTimeout(DEVICE_LOCK.npointUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deviceId: deviceIdSaya,
+          terdaftarPada: new Date().toISOString()
+        })
+      });
+      if (!resDaftar.ok) throw new Error('Gagal mendaftarkan device');
+      simpanCacheDeviceCheck(DEVICE_CHECK_CACHE_JAM);
+      return { ok: true };
+    }
+
+    if (data.deviceId === deviceIdSaya) {
+      simpanCacheDeviceCheck(DEVICE_CHECK_CACHE_JAM);
+      return { ok: true };
+    }
+
+    return { ok: false, alasan: 'device-lain' };
+  } catch (err) {
+    console.error('Cek device-lock gagal/timeout, fail-open:', err);
+    simpanCacheDeviceCheck(DEVICE_CHECK_GAGAL_CACHE_JAM);
+    return { ok: true, alasan: 'server-tidak-terjangkau' };
+  }
+}
+
 function pasangTombolLogout() {
   const btn = document.getElementById('logoutBtn');
   if (!btn) return;
