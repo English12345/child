@@ -3,7 +3,7 @@
 // yang buka file ini secara teknis bisa lihat username/password di bawah.
 // Cocok untuk "1 akun per pembeli", bukan untuk data rahasia.
 const AKUN_VALID = [
-  { username: "ayo", password: "belajar123" },
+  { username: "belajar01", password: "belajar123" },
   { username: "belajar02", password: "belajar254" },
   { username: "belajar03", password: "belajar504" },
   { username: "belajar04", password: "belajar766" },
