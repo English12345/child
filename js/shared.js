@@ -158,6 +158,7 @@ function pasangTombolLogout() {
   const btn = document.getElementById('logoutBtn');
   if (!btn) return;
   btn.addEventListener('click', () => {
+    if (typeof bunyiKlik === 'function') bunyiKlik();
     localStorage.removeItem('sudahLogin');
     localStorage.removeItem('namaPengguna');
     window.location.href = 'index.html';
