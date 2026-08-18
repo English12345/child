@@ -48,6 +48,15 @@
   0%, 100% { transform: rotate(-3deg); }
   50% { transform: rotate(3deg); }
 }
+@keyframes bintang-pop {
+  0% { transform: scale(.4) rotate(-15deg); }
+  60% { transform: scale(1.4) rotate(10deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes bintang-kilau {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.35); }
+}
 
 * { box-sizing: border-box; }
 
@@ -486,19 +495,21 @@ a { color: inherit; }
 .speak-btn:hover { transform: scale(1.08); }
 .speak-btn:active { transform: scale(.96); }
 
-.nav-row { display: flex; align-items: center; gap: 14px; }
+.nav-row { display: flex; align-items: center; justify-content: center; gap: 32px; }
 .nav-btn {
   border: none;
-  background: var(--white);
-  color: var(--tosca-900);
-  width: 48px; height: 48px;
+  background: linear-gradient(150deg, var(--tosca-600), var(--tosca-900));
+  color: var(--white);
+  width: 76px; height: 76px;
   border-radius: 50%;
-  font-size: 20px;
-  box-shadow: var(--shadow-soft);
-  transition: transform .15s ease, background .15s ease;
+  font-size: 32px;
+  font-weight: 800;
+  box-shadow: var(--shadow-pop);
+  transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
 }
-.nav-btn:hover { background: var(--tosca-100); transform: translateY(-2px); }
-.nav-btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+.nav-btn:hover { transform: translateY(-3px) scale(1.06); box-shadow: var(--shadow-glow); }
+.nav-btn:active { transform: scale(.92); }
+.nav-btn:disabled { opacity: .35; cursor: not-allowed; transform: none; background: var(--tosca-100); color: var(--tosca-900); box-shadow: none; }
 
 .btn-secondary {
   border: 2px solid var(--tosca-600);
@@ -526,6 +537,41 @@ a { color: inherit; }
 .quiz-question { font-weight: 800; color: var(--ink-soft); font-size: 14px; margin-bottom: 4px; }
 .quiz-prompt { font-family: var(--font-display); font-size: 24px; margin-bottom: 24px; }
 
+/* Baris bintang skor: 1 bintang per soal, terisi emas (benar) atau merah (salah) */
+.stars-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 4px auto 20px;
+  max-width: 480px;
+}
+.star-item {
+  font-size: 22px;
+  line-height: 1;
+  color: #D9E7E4;
+  text-shadow: none;
+  transition: color .2s ease, text-shadow .2s ease;
+}
+.star-item.aktif { color: var(--tosca-400); }
+.star-item.benar {
+  color: var(--kuning-600);
+  text-shadow: 0 0 8px rgba(245, 183, 0, .85), 0 0 18px rgba(245, 183, 0, .55);
+  animation: bintang-pop .45s ease, bintang-kilau 1.6s ease-in-out infinite 0.45s;
+}
+.star-item.salah {
+  color: var(--danger);
+  text-shadow: 0 0 8px rgba(232, 89, 75, .8), 0 0 18px rgba(232, 89, 75, .5);
+  animation: bintang-pop .45s ease, bintang-kilau 1.6s ease-in-out infinite 0.45s;
+}
+
+/* Kotak feedback emoji + teks setelah menjawab */
+.feedback-box { min-height: 10px; margin-top: 4px; }
+.feedback-emoji { font-size: 58px; line-height: 1; animation: bintang-pop .4s ease; }
+.feedback-text { font-family: var(--font-display); font-weight: 800; font-size: 17px; margin-top: 2px; }
+.feedback-text.benar { color: var(--success); }
+.feedback-text.salah { color: var(--danger); }
+
 .options-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -548,16 +594,8 @@ a { color: inherit; }
 .option-btn:disabled { cursor: default; transform: none; }
 
 .quiz-footer {
-  margin-top: 22px;
-  display: flex; justify-content: space-between; align-items: center;
-}
-.quiz-score-pill {
-  background: var(--kuning-100);
-  color: var(--tosca-900);
-  font-weight: 800;
-  font-size: 13px;
-  padding: 7px 14px;
-  border-radius: 999px;
+  margin-top: 8px;
+  display: flex; justify-content: center; align-items: center;
 }
 
 .result-card {
@@ -586,6 +624,8 @@ a { color: inherit; }
   .flip-card { height: 340px; }
   .flip-emoji { font-size: 76px; }
   .options-grid { grid-template-columns: 1fr; }
+  .nav-row { gap: 22px; }
+  .nav-btn { width: 66px; height: 66px; font-size: 28px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
